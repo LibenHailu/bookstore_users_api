@@ -2,6 +2,7 @@ package users
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/LibenHailu/bookstore_users_api/datasources/mysql/users_db"
 	"github.com/LibenHailu/bookstore_users_api/logger"
@@ -13,11 +14,12 @@ import (
 const (
 	// indexUniqueEmail = "email_UNIQUE"
 	// errorNoRows      = "no rows in result set"
-	queryInsertUser       = "INSERT INTO users(first_name, last_name,email,date_created,password,status) VALUES (?,?,?,?,?,?);"
-	queryGetUser          = "SELECT id, first_name, last_name, email, date_created,status FROM users WHERE id=?;"
-	queryUpdateUser       = "UPDATE users SET first_name = ?, last_name = ?, email =? WHERE id=?;"
-	queryDeleteUser       = "DELETE FROM users WHERE id=?;"
-	queryFindUserByStatus = "SELECT id ,first_name,last_name ,email,date_created,status FROM users WHERE status=?;"
+	queryInsertUser             = "INSERT INTO users(first_name, last_name,email,date_created,password,status) VALUES (?,?,?,?,?,?);"
+	queryGetUser                = "SELECT id, first_name, last_name, email, date_created,status FROM users WHERE id=?;"
+	queryUpdateUser             = "UPDATE users SET first_name = ?, last_name = ?, email =? WHERE id=?;"
+	queryDeleteUser             = "DELETE FROM users WHERE id=?;"
+	queryFindUserByStatus       = "SELECT id ,first_name,last_name ,email,date_created,status FROM users WHERE status=?;"
+	queryFindByEmailAndPassword = "SELECT id ,first_name,last_name ,email,date_created,status FROM users WHERE email=? AND password=?;"
 )
 
 // var (
@@ -33,7 +35,7 @@ func (user *User) Get() *errors.RestErr {
 	defer stmt.Close()
 
 	result := stmt.QueryRow(user.Id)
-	if getErr := result.Scan(&user.Id, &user.FirstName, &user.LastName, &user.Email, &user.DateCreated, &user.Status); err != nil {
+	if getErr := result.Scan(&user.Id, &user.FirstName, &user.LastName, &user.Email, &user.DateCreated, &user.Status); getErr != nil {
 		// sqlErr, ok := getErr.(*mysql.MySQLError)
 		// if !ok {
 		// 	return errors.NewInternalServerError(fmt.Sprintf("error when trying to get user: %s", getErr.Error()))
@@ -152,4 +154,24 @@ func (user *User) SearchUser(status string) ([]User, *errors.RestErr) {
 	}
 	return results, nil
 
+}
+
+func (user *User) FindByEmailAndPassword() *errors.RestErr {
+
+	stmt, err := users_db.Client.Prepare(queryFindByEmailAndPassword)
+	if err != nil {
+		logger.Error("error when trying to prepare get  user by email and password statement", err)
+		return errors.NewInternalServerError("database error")
+	}
+	defer stmt.Close()
+
+	result := stmt.QueryRow(user.Email, user.Password, StatusActive)
+	if getErr := result.Scan(&user.Id, &user.FirstName, &user.LastName, &user.Email, &user.DateCreated, &user.Status); getErr != nil {
+		if strings.Contains(getErr.Error(), mysql_utils.ErrorNoRows) {
+			return errors.NewInternalServerError("invaild user credentials")
+		}
+		logger.Error("error when trying to get user by email and password", err)
+		return mysql_utils.ParseError(getErr)
+	}
+	return nil
 }
