@@ -10,15 +10,20 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func GetUser(c *gin.Context) {
-	userId, userErr := strconv.ParseInt(c.Param("user_id"), 10, 64)
+func getUserId(userIdParams string) (int64, *errors.RestErr) {
+	userId, userErr := strconv.ParseInt(userIdParams, 10, 64)
 	if userErr != nil {
-		err := errors.NewBadRequestError("user id should be a number")
-		c.JSON(err.Status, err)
-		return
+		return 0, errors.NewBadRequestError("user id should be a number")
 	}
+	return userId, nil
+}
 
-	user, getErr := services.GetUser(userId)
+func Get(c *gin.Context) {
+	userId, idErr := getUserId(c.Param("user_id"))
+	if idErr != nil {
+		c.JSON(idErr.Status, idErr)
+	}
+	user, getErr := services.UsersService.GetUser(userId)
 
 	if getErr != nil {
 
@@ -26,18 +31,18 @@ func GetUser(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, user)
+	c.JSON(http.StatusOK, user.Marshall(c.GetHeader("X-Public") == "true"))
 }
 
-func CreateUser(c *gin.Context) {
+func Create(c *gin.Context) {
+
 	var user users.User
 	if err := c.ShouldBind(&user); err != nil {
 		restErr := errors.NewBadRequestError("invalid json body")
 		c.JSON(restErr.Status, restErr)
 		return
 	}
-
-	result, saveErr := services.CreateUser(user)
+	result, saveErr := services.UsersService.CreateUser(user)
 
 	if saveErr != nil {
 
@@ -45,10 +50,60 @@ func CreateUser(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusCreated, result)
+	c.JSON(http.StatusCreated, result.Marshall(c.GetHeader("X-Public") == "true"))
 
 }
 
-func SearchUser(c *gin.Context) {
-	c.String(http.StatusNotImplemented, "implement me")
+func Update(c *gin.Context) {
+
+	userId, idErr := getUserId(c.Param("user_id"))
+	if idErr != nil {
+		c.JSON(idErr.Status, idErr)
+	}
+
+	var user users.User
+	if err := c.ShouldBind(&user); err != nil {
+		restErr := errors.NewBadRequestError("invalid json body")
+		c.JSON(restErr.Status, restErr)
+		return
+	}
+
+	user.Id = userId
+
+	isPartial := c.Request.Method == http.MethodPatch
+	result, err := services.UsersService.UpdateUser(isPartial, user)
+	if err != nil {
+		c.JSON(err.Status, err)
+		return
+	}
+	c.JSON(http.StatusOK, result.Marshall(c.GetHeader("X-Public") == "true"))
+
+}
+
+func Delete(c *gin.Context) {
+	userId, idErr := getUserId(c.Param("user_id"))
+	if idErr != nil {
+		c.JSON(idErr.Status, idErr)
+	}
+
+	if err := services.UsersService.DeleteUser(userId); err != nil {
+		c.JSON(err.Status, err)
+		return
+	}
+	c.JSON(http.StatusOK, map[string]string{"status": "deleted successfully"})
+}
+
+func Search(c *gin.Context) {
+	status := c.Query("status")
+	users, err := services.UsersService.SearchUser(status)
+	if err != nil {
+		c.JSON(err.Status, err)
+		return
+	}
+	// users.Marshall()
+	// result := make([]interface{}, len(users))
+	// for index, user := range users {
+	// 	result[index] = user.Marshall(c.GetHeader("X-Public") == "true")
+	// }
+	c.JSON(http.StatusOK, users.Marshall(c.GetHeader("X-Public") == "true"))
 }
