@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/LibenHailu/bookstore_oauth_library/oauth"
 	"github.com/LibenHailu/bookstore_users_api/domains/users"
 	"github.com/LibenHailu/bookstore_users_api/services"
 	"github.com/LibenHailu/bookstore_users_api/utils/errors"
@@ -19,6 +20,22 @@ func getUserId(userIdParams string) (int64, *errors.RestErr) {
 }
 
 func Get(c *gin.Context) {
+	// if oauth.IsPublic(c.Request){
+
+	// }
+
+	if err := oauth.AuthenticateRequest(c.Request); err != nil {
+		c.JSON(err.Status, err)
+		return
+	}
+	// if callerId:= oauth.GetCallerId(c.Request); callerId == 0{
+	// 	err:=errors.RestErr{
+	// 		Status: http.StatusUnauthorized,
+	// 		Message: "resource not availbale",
+	// 	}
+	// 	c.JSON(err.Status,err)
+	// }
+
 	userId, idErr := getUserId(c.Param("user_id"))
 	if idErr != nil {
 		c.JSON(idErr.Status, idErr)
@@ -30,8 +47,12 @@ func Get(c *gin.Context) {
 		c.JSON(getErr.Status, getErr)
 		return
 	}
-
-	c.JSON(http.StatusOK, user.Marshall(c.GetHeader("X-Public") == "true"))
+	if oauth.GetCallerId(c.Request) == userId {
+		c.JSON(http.StatusOK, user.Marshall(false))
+		return
+	}
+	// c.JSON(http.StatusOK, user.Marshall(c.GetHeader("X-Public") == "true"))
+	c.JSON(http.StatusOK, user.Marshall(oauth.IsPublic(c.Request)))
 }
 
 func Create(c *gin.Context) {
